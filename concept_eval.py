@@ -432,60 +432,26 @@ def compute_conceptSHAP(concept_mask, topic_vec,
 
 
 def compute_separability(in_concept, out_concept, in_yhat, out_yhat, logger=None):
-    #def compute_separability(in_feat, out_feat, in_concept, out_concept, in_yhat, out_yhat, logger):
-    """
-    in_feat_n = in_feat/(np.linalg.norm(in_feat,axis=3,keepdims=True)+1e-9)
-    out_feat_n = out_feat/(np.linalg.norm(out_feat,axis=3,keepdims=True)+1e-9)
-    N_in, N_out = in_feat.shape[0], out_feat.shape[0]
+    # compute Multivariate Separability (global)
+    separa = {'global': multivar_separa(in_concept, out_concept).numpy()}
 
-    ## option 1) Fisher's LDA
-    sep_feat = FLD(in_feat_n.reshape(N_in,-1),out_feat_n.reshape(N_out,-1), optimal=True)
-    #sep_feat = FLD(in_test_features_n.reshape(N_IN,-1)[np.random.choice(N_IN, size=1000, replace=False),:],
-    #                out_test_features_n.reshape(N_OUT,-1)[np.random.choice(N_OUT, size=1000, replace=False),:],
-    #                optimal=True)
-    logger.info(f'[SEPARABILITY, FEATURES] FLD scores: {sep_feat}')
- 
-    sep_concept = FLD(in_concept, out_concept, optimal=False)
-    logger.info(f'[SEPARABILITY, CONCEPTS] FLD scores: {sep_concept}')
-    logger.info(f'[SEPARABILITY, CONCEPTS] average FLD score: {np.mean(sep_concept)}')
-    logger.info(f'[SEPARABILIRY, RATIO] concept FLD / optimal FLD: {np.mean(sep_concept)/sep_feat}')
-    
-    #sep_score = FLD(in_test_scores[:,None], out_test_scores[:,None])
-    #logger.info(f'[SEPARABILITY, OOD SCORES] FLD scores: {sep_score}')
-    separa = {'all':sep_concept} #/sep_feat}
-    """
-    
-
-    ## option 2) Multivariate Separability (global)
-    separa = {'global': multivar_separa(in_concept, out_concept).numpy()} 
-
-
-    # Per-class separability
-    num_classes = 50
+    # compute per-class separability
+    # num_classes = 50
     num_concepts = in_concept.shape[1]
     for i in range(num_classes):
         idx_in = np.where(in_yhat == i)[0]
         idx_out = np.where(out_yhat == i)[0]
         if logger:
             logger.info(f'class {i}: num IN - {len(idx_in)}, num OUT - {len(idx_out)}')
-        #if len(idx_in) < num_concepts or len(idx_out) < num_concepts:
-        #    separa['class'+str(i)] = None
-        #    continue
 
-        #sep_feat_ith  = FLD(in_feat_n[idx_in], out_feat_n[idx_out], optimal=True)
-        #logger.info(f'[CLASS {i}: SEPARABILITY, FEATURES] FLD scores: {sep_feat_ith}')
-        
         ## explanation using groundtruth ID/OOD labels
         #sep_concept_ith = FLD(in_concept[idx_in,:], out_concept[idx_out,:], optimal=False)
         sep_concept_ith = multivar_separa(in_concept[idx_in,:], out_concept[idx_out,:]).numpy()
         if logger:
             logger.info(f'[CLASS {i}: SEPARABILITY, CONCEPTS] separability using groundtruth ID/OOD: {sep_concept_ith}')
-            #logger.info(f'[CLASS {i}: SEPARABILIRY, CONCEPTS] averaged separability using groundtruth ID/OOD: {np.mean(sep_concept_ith)}')
-            #logger.info(f'[CLASS {i}: SEPARABILIRY, RATIO] concept FLD / optimal FLD using groundtruth ID/OOD: {np.mean(sep_concept_ith)/sep_feat_ith}')
 
         separa['class'+str(i)] = sep_concept_ith
-        #separa['class'+str(i)+'_FLD'] = sep_feat_ith
-    
+
     return separa
 
 
@@ -514,6 +480,7 @@ def explain_topK(scores, top_k, separa, figname=None):
     fig.tight_layout()
     plt.savefig(figname)
     plt.close()
+
 
 def explain_relative(scores, labels, separa, figname, figname_dist, top_k=6):
     """
@@ -555,6 +522,8 @@ def explain_relative(scores, labels, separa, figname, figname_dist, top_k=6):
     fig.savefig(figname_dist)
     plt.close()
     """
+
+
 def save_images(filepaths, figname, k=5):
     #if not len(filepaths):
     #    return
@@ -572,7 +541,6 @@ def save_images(filepaths, figname, k=5):
         count += 1
         if count >= k:
             break
-
 
     fig.savefig(figname)
     plt.close()
@@ -605,19 +573,9 @@ def main(args):
     ## load trained_model
     logger.info(f"Loading model from {args.model_path}")
     feature_model, predict_model = helper.load_model_inception_new(_, _, input_size=INPUT_SHAPE, pretrain=True, n_gpus=1, modelname=args.model_path)
-    
-    """
-    s_in_ = run_ood_over_batch(in_loader.next()[0], feature_model, predict_model, args, num_classes=50)
-    s_out_ = run_ood_over_batch(out_loader.next(), feature_model, predict_model, args, num_classes=50)
-    print(s_in_[:20])
-    print(s_out_[:20])
-    input()
-    """
 
     in_test_features = feature_model.predict(in_loader)
     out_test_features = feature_model.predict(out_loader)
-    #in_test_features = feature_model.predict(in_loader.next()[0])
-    #out_test_features = feature_model.predict(out_loader.next())
     N_IN, N_OUT = in_test_features.shape[0], out_test_features.shape[0]
 
     ## load topic model
@@ -728,16 +686,6 @@ def main(args):
     ## Generating explanations.....
 
     separa = np.load(separa_path, allow_pickle=True).item()
-    """
-    separa_class = np.zeros(N_CLASSES) 
-    # separability scores averaged across concepts with groudntruth ID/OOD
-    count = 0
-    for i in range(N_CLASSES):
-        separa_class[i] = np.mean(separa['class'+str(i)])
-        if separa_class[i]:
-            count += 1
-    logger.info(f'[PER-CLASS SEPARABILIRY, RATIO] average concept FLD: {np.sum(separa_class)/count}')
-    """
     separa_global = separa['global']
     logger.info(f'[GLOBAL SEPARABILITY] multivariate separability: {separa_global}')
     separa_class = np.array([separa['class'+str(i)] for i in range(N_CLASSES)], dtype=np.float64)
@@ -832,7 +780,7 @@ def main(args):
                                         in_test_features, out_test_features, y_test, in_test_yhat, out_test_yhat, auroc,
                                         in_loader, out_loader,
                                         topic_model, feature_model, args, logger,
-                                        finetune=False, labels=classes)
+                                        finetune=True, labels=classes)
             #compl_class, compl_detect: dim=(len(classes),)
             outputs_class = np.append(outputs_class, compl_class)
             outputs_detect = np.append(outputs_detect, compl_detect)
@@ -860,15 +808,6 @@ def main(args):
         shap_path = os.path.join(explain_dir,'{}_SHAP.pkl'.format(args.score))
         with open(shap_path,'wb') as f:
             pickle.dump(shap_expl, f)
-
-        #concept_tmp = np.arange(inputs.shape[1])
-        #ind = np.argpartition(shap_class, -5)[-5:]
-        #logger.info(f'[ConceptSHAP CLASS {_class}] classification | top-5 important concept combinations: {concept_tmp[inputs[ind[0],:]==0]} \n {concept_tmp[inputs[ind[1],:]==0] \n {concept_tmp[inputs[ind[2],:]==0]} \n {concept_tmp[inputs[ind[3],:]==0]} \n {concept_tmp[inputs[ind[4],:]==0]}')
-        #logger.info(f'[ConceptSHAP CLASS {_class}] classification | top-5 highest SHAP scores: {shap_class[ind]}')
-        #ind = np.argpartition(shap_detect, -5)[-5:]
-        #logger.info(f'[ConceptSHAP CLASS {_class}] detection | top-5 important concepts: {ind}')
-        #logger.info(f'[ConceptSHAP CLASS {_class}] detection | top-5 important concept combinations: {concept_tmp[inputs[ind[0],:]==0]} \n {concept_tmp[inputs[ind[1],:]==0] \n {concept_tmp[inputs[ind[2],:]==0]} \n {concept_tmp[inputs[ind[3],:]==0]} \n {concept_tmp[inputs[ind[4],:]==0]}')
-        #logger.info(f'[ConceptSHAP CLASS {_class}] detection | top-5 highest SHAP scores: {shap_detect[ind]}')
 
 
     """

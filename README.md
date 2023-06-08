@@ -20,7 +20,7 @@ python concept_learn.py --name {NAME_OF_EXPERIMENT} --num_concept {NUM_CONCEPTS}
                         --feat_l2 --coeff_feat {COEFF_NORM} 
                         --separability --coeff_separa {COEFF_SEP}
 ```
-* To evaluate detection completeness and concept separability:
+* To evaluate the learned concepts (e.g., detection completeness and concept separability):
 ```
 python concept_eval.py --name {NAME_OF_EXPERIMENT} --result_dir {PATH_TO_CONCEPTS}
                        --out_data {OOD_DATASET} --gpu {GPU} 
